@@ -8,11 +8,13 @@ export default defineConfig({
     host: true, // Listens on all local IPs (0.0.0.0)
     port: process.env.PORT ? parseInt(process.env.PORT, 10) : 5173,
     strictPort: true,
+    allowedHosts: true, // Allows all hosts (fixes Render host mismatch)
   },
   preview: {
     host: true, // Same for preview server
     port: process.env.PORT ? parseInt(process.env.PORT, 10) : 4173,
     strictPort: true,
+    allowedHosts: true,
   }
 })
 
