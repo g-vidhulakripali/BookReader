@@ -65,7 +65,7 @@ export const PDFPage = React.forwardRef<HTMLDivElement, PDFPageProps>(
           renderTask.cancel();
         }
       };
-    }, [pdf, pageNumber, width, height]);
+    }, [pdf, pageNumber, width, height, zoom]);
 
     // page-flip looks for elements with specific class names
     return (
