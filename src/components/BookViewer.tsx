@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 // @ts-ignore
 import HTMLFlipBook from 'react-pageflip';
 import type { PDFDocumentProxy } from 'pdfjs-dist';

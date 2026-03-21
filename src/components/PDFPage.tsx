@@ -45,6 +45,7 @@ export const PDFPage = React.forwardRef<HTMLDivElement, PDFPageProps>(
           const renderContext = {
             canvasContext: context,
             viewport: viewport,
+            canvas: canvas,
           };
           
           renderTask = page.render(renderContext);
