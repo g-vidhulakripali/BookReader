@@ -229,11 +229,12 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
                   maxShadowOpacity={0.5} 
                   showPageCorners={true}
                   mobileScrollSupport={true}
-                  swipeDistance={30}
+                  useMouseEvents={zoomLevel <= 1}
+                  swipeDistance={isMobile ? 60 : 30}
                   onFlip={handlePageChange}
                   ref={flipBookRef}
                   className="html-flip-book"
-                  style={{ margin: '0 auto', touchAction: 'pan-y' }}
+                  style={{ margin: '0 auto', touchAction: zoomLevel <= 1 ? 'pan-y' : 'auto' }}
                 >
                   {pagesArray.map((pageNum) => (
                     <PDFPage 
