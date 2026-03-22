@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { PDFPage } from './PDFPage';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, BookmarkPlus, BookmarkCheck, List, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, BookmarkPlus, BookmarkCheck, List, X, Menu } from 'lucide-react';
 
 interface BookViewerProps {
   pdf: PDFDocumentProxy;
@@ -17,6 +17,7 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
 
   useEffect(() => {
@@ -101,14 +102,23 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
   return (
     <div className="glass-panel animate-fade-in" style={{ width: '100%', height: 'calc(100vh - 100px)', maxWidth: '1500px', display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)' }}>
       <div className="book-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
-        <div>
-          <h3 style={{ margin: 0, fontFamily: 'Outfit', fontSize: isMobile ? '1.1rem' : '1.25rem', wordBreak: 'break-all' }}>{file?.name || 'Document'}</h3>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Page {currentPage + 1} of {numPages}
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ margin: 0, fontFamily: 'Outfit', fontSize: isMobile ? '1.1rem' : '1.25rem', wordBreak: 'break-all', textAlign: 'left' }}>{file?.name || 'Document'}</h3>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block', textAlign: 'left' }}>
+              Page {currentPage + 1} of {numPages}
+            </span>
+          </div>
+          
+          {isMobile && (
+            <button className="glass-pill flex-center" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} style={{ padding: '0.5rem', width: '40px', height: '40px' }} aria-label="Menu">
+              {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          )}
         </div>
         
-        <div className="flex-center toolbar-actions" style={{ gap: '0.5rem' }}>
+        {(!isMobile || isMobileMenuOpen) && (
+        <div className="flex-center toolbar-actions animate-fade-in" style={{ gap: '0.5rem', width: isMobile ? '100%' : 'auto', marginTop: isMobile ? '0.5rem' : 0 }}>
           <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={() => flipBookRef.current?.pageFlip().flipPrev()} title="Previous Page (Left Arrow)">
             <ChevronLeft size={22} />
           </button>
@@ -172,6 +182,7 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
             )}
           </div>
         </div>
+        )}
       </div>
       
       <div style={{ flex: 1, position: 'relative', display: 'flex', overflow: 'auto', padding: isMobile ? '0.5rem' : '1rem', borderRadius: '12px' }}>
@@ -180,9 +191,9 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
         <button 
            className="glass-pill flex-center hover-scale" 
            style={isMobile ? {
-             width: '44px', height: '44px', zIndex: 100, 
-             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-             cursor: 'pointer', position: 'fixed', left: '1rem', bottom: '1.5rem'
+             width: '32px', height: '32px', zIndex: 100, opacity: 0.5,
+             background: 'var(--glass-bg)', border: 'none', boxShadow: 'none',
+             cursor: 'pointer', position: 'fixed', left: '0.5rem', top: '50%', transform: 'translateY(-50%)'
            } : {
              width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
              background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
@@ -248,9 +259,9 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
         <button 
            className="glass-pill flex-center hover-scale" 
            style={isMobile ? {
-             width: '44px', height: '44px', zIndex: 100, 
-             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-             cursor: 'pointer', position: 'fixed', right: '1rem', bottom: '1.5rem'
+             width: '32px', height: '32px', zIndex: 100, opacity: 0.5,
+             background: 'var(--glass-bg)', border: 'none', boxShadow: 'none',
+             cursor: 'pointer', position: 'fixed', right: '0.5rem', top: '50%', transform: 'translateY(-50%)'
            } : {
              width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
              background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
