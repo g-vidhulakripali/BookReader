@@ -176,21 +176,25 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
       
       <div style={{ flex: 1, position: 'relative', display: 'flex', overflow: 'auto', padding: isMobile ? '0.5rem' : '1rem', borderRadius: '12px' }}>
         
-        {/* Giant Left Flip Button (hidden on mobile) */}
-        {!isMobile && (
-          <button 
-             className="glass-pill flex-center hover-scale" 
-             style={{ width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
+        {/* Left Flip Button (Floating on Mobile) */}
+        <button 
+           className="glass-pill flex-center hover-scale" 
+           style={isMobile ? {
+             width: '44px', height: '44px', zIndex: 100, 
              background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-             cursor: 'pointer', position: 'sticky', left: '0.5rem', top: 'calc(50% - 30px)' }} 
-             onClick={() => flipBookRef.current?.pageFlip().flipPrev()} 
-             title="Previous Page"
-          >
-             <ChevronLeft size={32} />
-          </button>
-        )}
+             cursor: 'pointer', position: 'fixed', left: '1rem', bottom: '1.5rem'
+           } : {
+             width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
+             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
+             cursor: 'pointer', position: 'sticky', left: '0.5rem', top: 'calc(50% - 30px)' 
+           }}
+           onClick={() => flipBookRef.current?.pageFlip().flipPrev()} 
+           title="Previous Page"
+        >
+           <ChevronLeft size={isMobile ? 24 : 32} />
+        </button>
 
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: 'min-content', minWidth: 'min-content', padding: isMobile ? '0.5rem 0' : '2rem 0' }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: 'min-content', minWidth: 'min-content', padding: isMobile ? '0.5rem 0 3rem 0' : '2rem 0' }}>
           {/* Spacer Wrapper - forces scrollbars based on zoom level visually changing physical dimensions */}
           <div style={{ width: `${baseWidth * finalScale}px`, height: `${600 * finalScale}px`, transition: 'width 0.3s, height 0.3s', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             
@@ -213,10 +217,12 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
                   autoSize={false} 
                   maxShadowOpacity={0.5} 
                   showPageCorners={true}
+                  mobileScrollSupport={true}
+                  swipeDistance={30}
                   onFlip={handlePageChange}
                   ref={flipBookRef}
                   className="html-flip-book"
-                  style={{ margin: '0 auto' }}
+                  style={{ margin: '0 auto', touchAction: 'pan-y' }}
                 >
                   {pagesArray.map((pageNum) => (
                     <PDFPage 
@@ -238,19 +244,23 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
           </div>
         </div>
 
-        {/* Giant Right Flip Button (hidden on mobile) */}
-        {!isMobile && (
-          <button 
-             className="glass-pill flex-center hover-scale" 
-             style={{ width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
+        {/* Right Flip Button (Floating on Mobile) */}
+        <button 
+           className="glass-pill flex-center hover-scale" 
+           style={isMobile ? {
+             width: '44px', height: '44px', zIndex: 100, 
              background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-             cursor: 'pointer', position: 'sticky', right: '0.5rem', top: 'calc(50% - 30px)' }} 
-             onClick={() => flipBookRef.current?.pageFlip().flipNext()} 
-             title="Next Page"
-          >
-             <ChevronRight size={32} />
-          </button>
-        )}
+             cursor: 'pointer', position: 'fixed', right: '1rem', bottom: '1.5rem'
+           } : {
+             width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
+             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
+             cursor: 'pointer', position: 'sticky', right: '0.5rem', top: 'calc(50% - 30px)' 
+           }}
+           onClick={() => flipBookRef.current?.pageFlip().flipNext()} 
+           title="Next Page"
+        >
+           <ChevronRight size={isMobile ? 24 : 32} />
+        </button>
 
       </div>
     </div>
