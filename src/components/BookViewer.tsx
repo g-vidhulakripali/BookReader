@@ -17,6 +17,19 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobile = windowWidth < 768;
+  const baseWidth = isMobile ? 400 : 800; // HTMLFlipBook uses 400px per page. 800 is a 2-page spread, 400 is 1 page.
+  const paddingOffset = isMobile ? 32 : 64;
+  const layoutScale = Math.min(1, (windowWidth - paddingOffset) / baseWidth);
+  const finalScale = zoomLevel * layoutScale;
 
   const storageKey = useMemo(() => `bookreader_${file?.name || 'default'}_state`, [file]);
 
@@ -89,13 +102,13 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
     <div className="glass-panel animate-fade-in" style={{ width: '100%', height: 'calc(100vh - 100px)', maxWidth: '1500px', display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)' }}>
       <div className="book-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
         <div>
-          <h3 style={{ margin: 0, fontFamily: 'Outfit', fontSize: '1.25rem' }}>{file?.name || 'Document'}</h3>
+          <h3 style={{ margin: 0, fontFamily: 'Outfit', fontSize: isMobile ? '1.1rem' : '1.25rem', wordBreak: 'break-all' }}>{file?.name || 'Document'}</h3>
           <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
             Page {currentPage + 1} of {numPages}
           </span>
         </div>
         
-        <div className="flex-center" style={{ gap: '0.5rem' }}>
+        <div className="flex-center toolbar-actions" style={{ gap: '0.5rem' }}>
           <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={() => flipBookRef.current?.pageFlip().flipPrev()} title="Previous Page (Left Arrow)">
             <ChevronLeft size={22} />
           </button>
@@ -161,26 +174,28 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
         </div>
       </div>
       
-      <div style={{ flex: 1, position: 'relative', display: 'flex', overflow: 'auto', padding: '1rem', borderRadius: '12px' }}>
+      <div style={{ flex: 1, position: 'relative', display: 'flex', overflow: 'auto', padding: isMobile ? '0.5rem' : '1rem', borderRadius: '12px' }}>
         
-        {/* Giant Left Flip Button */}
-        <button 
-           className="glass-pill flex-center hover-scale" 
-           style={{ width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
-           background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-           cursor: 'pointer', position: 'sticky', left: '0.5rem', top: 'calc(50% - 30px)' }} 
-           onClick={() => flipBookRef.current?.pageFlip().flipPrev()} 
-           title="Previous Page"
-        >
-           <ChevronLeft size={32} />
-        </button>
+        {/* Giant Left Flip Button (hidden on mobile) */}
+        {!isMobile && (
+          <button 
+             className="glass-pill flex-center hover-scale" 
+             style={{ width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
+             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
+             cursor: 'pointer', position: 'sticky', left: '0.5rem', top: 'calc(50% - 30px)' }} 
+             onClick={() => flipBookRef.current?.pageFlip().flipPrev()} 
+             title="Previous Page"
+          >
+             <ChevronLeft size={32} />
+          </button>
+        )}
 
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: 'min-content', minWidth: 'min-content', padding: '2rem 0' }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: 'min-content', minWidth: 'min-content', padding: isMobile ? '0.5rem 0' : '2rem 0' }}>
           {/* Spacer Wrapper - forces scrollbars based on zoom level visually changing physical dimensions */}
-          <div style={{ width: `${800 * zoomLevel}px`, height: `${600 * zoomLevel}px`, transition: 'width 0.3s, height 0.3s', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ width: `${baseWidth * finalScale}px`, height: `${600 * finalScale}px`, transition: 'width 0.3s, height 0.3s', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             
-            {/* The Transformer - applies GPU scale but its physical size remains exactly 800x600 for the book */}
-            <div style={{ width: '800px', height: '600px', transform: `scale(${zoomLevel})`, transformOrigin: 'center center', transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {/* The Transformer - applies GPU scale but its physical size remains exact for the book */}
+            <div style={{ width: `${baseWidth}px`, height: '600px', transform: `scale(${finalScale})`, transformOrigin: 'top center', transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
               {numPages > 0 ? (
                 // @ts-ignore
                 <HTMLFlipBook 
@@ -223,17 +238,19 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
           </div>
         </div>
 
-        {/* Giant Right Flip Button */}
-        <button 
-           className="glass-pill flex-center hover-scale" 
-           style={{ width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
-           background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-           cursor: 'pointer', position: 'sticky', right: '0.5rem', top: 'calc(50% - 30px)' }} 
-           onClick={() => flipBookRef.current?.pageFlip().flipNext()} 
-           title="Next Page"
-        >
-           <ChevronRight size={32} />
-        </button>
+        {/* Giant Right Flip Button (hidden on mobile) */}
+        {!isMobile && (
+          <button 
+             className="glass-pill flex-center hover-scale" 
+             style={{ width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
+             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
+             cursor: 'pointer', position: 'sticky', right: '0.5rem', top: 'calc(50% - 30px)' }} 
+             onClick={() => flipBookRef.current?.pageFlip().flipNext()} 
+             title="Next Page"
+          >
+             <ChevronRight size={32} />
+          </button>
+        )}
 
       </div>
     </div>

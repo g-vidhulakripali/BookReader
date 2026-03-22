@@ -25,9 +25,9 @@ function App() {
   return (
     <div className="app-container flex-center" style={{ minHeight: '100vh', flexDirection: 'column' }}>
       <nav className="glass-panel animate-fade-in" style={{ 
-        position: 'fixed', top: '1.5rem', width: '90%', maxWidth: '1200px', 
+        position: 'fixed', top: '1rem', width: '95%', maxWidth: '1200px', 
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-        padding: '0.75rem 1.5rem', zIndex: 100 
+        padding: '0.6rem 1rem', zIndex: 100 
       }}>
         <div className="brand flex-center" style={{ gap: '0.75rem' }}>
           <BookOpen color="var(--accent-color)" size={28} />
@@ -35,8 +35,8 @@ function App() {
         </div>
         <div className="controls flex-center" style={{ gap: '1rem' }}>
           {pdfDoc && (
-            <button className="glass-pill" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }} onClick={() => setPdfDoc(null)}>
-              Close Book
+            <button className="glass-pill" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', whiteSpace: 'nowrap' }} onClick={() => setPdfDoc(null)}>
+              Close
             </button>
           )}
           <button className="glass-pill flex-center" onClick={toggleTheme} style={{ padding: '0.6rem' }} aria-label="Toggle Theme">
@@ -45,7 +45,7 @@ function App() {
         </div>
       </nav>
 
-      <main className="main-content flex-center animate-fade-in" style={{ flex: 1, width: '100%', padding: '7rem 1.5rem 2rem', animationDelay: '0.1s' }}>
+      <main className="main-content flex-center animate-fade-in" style={{ flex: 1, width: '100%', padding: '5rem 0.5rem 1rem', animationDelay: '0.1s' }}>
         {!pdfDoc ? (
           <PDFUploader onPDFLoaded={handlePDFLoaded} />
         ) : (
