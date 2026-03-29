@@ -22,6 +22,14 @@ function App() {
     setPdfFile(file);
   };
 
+  if (pdfDoc) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+         <BookViewer pdf={pdfDoc} file={pdfFile} onClose={() => setPdfDoc(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="app-container flex-center" style={{ minHeight: '100vh', flexDirection: 'column' }}>
       <nav className="glass-panel animate-fade-in" style={{ 
@@ -34,11 +42,6 @@ function App() {
           <span style={{ fontFamily: 'Outfit', fontWeight: 600, fontSize: '1.35rem', letterSpacing: '-0.02em' }}>BookReader</span>
         </div>
         <div className="controls flex-center" style={{ gap: '1rem' }}>
-          {pdfDoc && (
-            <button className="glass-pill" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }} onClick={() => setPdfDoc(null)}>
-              Close Book
-            </button>
-          )}
           <button className="glass-pill flex-center" onClick={toggleTheme} style={{ padding: '0.6rem' }} aria-label="Toggle Theme">
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
@@ -46,11 +49,7 @@ function App() {
       </nav>
 
       <main className="main-content flex-center animate-fade-in" style={{ flex: 1, width: '100%', padding: '7rem 1.5rem 2rem', animationDelay: '0.1s' }}>
-        {!pdfDoc ? (
-          <PDFUploader onPDFLoaded={handlePDFLoaded} />
-        ) : (
-          <BookViewer pdf={pdfDoc} file={pdfFile} />
-        )}
+        <PDFUploader onPDFLoaded={handlePDFLoaded} />
       </main>
     </div>
   );
