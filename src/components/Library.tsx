@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, Plus, LogOut, Loader2, FileText, Trash2 } from 'lucide-react';
+import { Plus, LogOut, Loader2, FileText, Trash2 } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist';
@@ -210,8 +210,8 @@ export function Library({ onOpenBook }: { onOpenBook: (book: Book, pdfDoc: PDFDo
         backgroundColor: '#131B2F'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <BookOpen color="#6366f1" size={28} />
-          <h1 style={{ margin: 0, fontFamily: 'Outfit', fontSize: '1.5rem', fontWeight: 600 }}>My Library</h1>
+          <img src="/icon.png" alt="Logo" style={{ width: '36px', height: '36px', borderRadius: '10px', boxShadow: '0 4px 10px rgba(99, 102, 241, 0.3)' }} />
+          <h1 style={{ margin: 0, fontFamily: 'Outfit', fontSize: '1.5rem', fontWeight: 600 }}>BookReader Pro</h1>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>

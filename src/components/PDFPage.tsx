@@ -94,11 +94,9 @@ export const PDFPage = React.forwardRef<HTMLDivElement, PDFPageProps>(
         }
       };
 
-      // Clear the canvas explicitly if component is unloaded off-screen to save RAM
-      if (!shouldRender && canvasRef.current) {
-         const ctx = canvasRef.current.getContext('2d');
-         if (ctx) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      if (!shouldRender) {
          if (textLayerRef.current) textLayerRef.current.innerHTML = '';
+         return; // Canvas is unmounted by React, no need to manually clear Context
       }
 
       renderPage();
@@ -204,7 +202,7 @@ export const PDFPage = React.forwardRef<HTMLDivElement, PDFPageProps>(
         onPointerCancelCapture={() => { setIsDrawingHighlight(false); setDraftRect(null); }}
       >
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-           <canvas ref={canvasRef} />
+           {shouldRender && <canvas ref={canvasRef} />}
         </div>
         
         {/* Text Layer Container */}
