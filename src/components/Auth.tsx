@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { BookOpen, User as UserIcon, Lock } from 'lucide-react';
+import { User as UserIcon, Lock } from 'lucide-react';
 
 export function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +18,7 @@ export function Auth() {
 
     // If missing keys
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-      setError('Supabase connection missing. Please configure .env.local with your project keys.');
+      setError('Supabase connection missing. Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your Render environment variables.');
       setIsLoading(false);
       return;
     }
@@ -72,11 +72,11 @@ export function Auth() {
         
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
           <div style={{ 
-            width: '64px', height: '64px', borderRadius: '16px', 
-            backgroundColor: 'rgba(99, 102, 241, 0.1)', color: '#6366f1',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem'
+            width: '80px', height: '80px', borderRadius: '24px', 
+            overflow: 'hidden', marginBottom: '1rem',
+            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5), 0 0 20px rgba(99, 102, 241, 0.4)'
           }}>
-            <BookOpen size={32} />
+            <img src="/icon.png" alt="BookReader Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0, fontFamily: 'Outfit' }}>
             {isLogin ? 'Welcome Back' : 'Create Account'}
