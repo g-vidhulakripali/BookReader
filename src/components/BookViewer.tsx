@@ -1,72 +1,155 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 // @ts-ignore
 import HTMLFlipBook from 'react-pageflip';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { PDFPage } from './PDFPage';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, BookmarkPlus, BookmarkCheck, List, X, Menu } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, BookmarkPlus, BookmarkCheck, Search, Loader2, List, Highlighter, Trash2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 interface BookViewerProps {
   pdf: PDFDocumentProxy;
-  file: File | null;
+  book: { id: string; title: string; file_path: string };
+  onClose: () => void;
 }
 
-export function BookViewer({ pdf, file }: BookViewerProps) {
+export function BookViewer({ pdf, book, onClose }: BookViewerProps) {
+  const { user } = useAuth();
+  const containerRef = useRef<HTMLDivElement>(null);
   const flipBookRef = useRef<any>(null);
+
+  const [loadingState, setLoadingState] = useState(true);
+  
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(0);
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [bookmarks, setBookmarks] = useState<number[]>([]);
-  const [showBookmarks, setShowBookmarks] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [initialPage, setInitialPage] = useState<number>(0);
+  const [bookmarks, setBookmarks] = useState<{ id: string, page: number }[]>([]);
+  const [showBookmarksPanel, setShowBookmarksPanel] = useState(false);
+  const [highlights, setHighlights] = useState<any[]>([]);
+  const [isHighlightMode, setIsHighlightMode] = useState(false);
+  
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [renderZoom, setRenderZoom] = useState(1);
 
+  // Load state from Supabase
   useEffect(() => {
-    const handleResize = () => setWindowWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    async function fetchState() {
+      if (!user) return;
+      try {
+        const [progressRes, bookmarksRes, highlightsRes] = await Promise.all([
+          supabase.from('user_progress').select('*').eq('book_id', book.id).single(),
+          supabase.from('bookmarks').select('*').eq('book_id', book.id).order('page_number', { ascending: true }),
+          supabase.from('highlights').select('*').eq('book_id', book.id)
+        ]);
 
-  const isMobile = windowWidth < 768;
-  const baseWidth = isMobile ? 400 : 800; // HTMLFlipBook uses 400px per page. 800 is a 2-page spread, 400 is 1 page.
-  const paddingOffset = isMobile ? 32 : 64;
-  const layoutScale = Math.min(1, (windowWidth - paddingOffset) / baseWidth);
-  const finalScale = zoomLevel * layoutScale;
+        if (progressRes.data) {
+          setInitialPage(progressRes.data.current_page || 0);
+          setCurrentPage(progressRes.data.current_page || 0);
+          setRenderZoom(progressRes.data.zoom_level || 1);
+        }
 
-  const storageKey = useMemo(() => `bookreader_${file?.name || 'default'}_state`, [file]);
+        if (bookmarksRes.data) {
+          setBookmarks(bookmarksRes.data.map(b => ({ id: b.id, page: b.page_number })));
+        }
 
-  // Load initial state
-  const initialState = useMemo(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return { page: 0, zoom: 1, bookmarks: [] as number[] };
-  }, [storageKey]);
-
-  useEffect(() => {
-    if (pdf) {
-      setNumPages(pdf.numPages);
-      setZoomLevel(initialState.zoom);
-      setBookmarks(initialState.bookmarks || []);
-      setCurrentPage(initialState.page || 0);
+        if (highlightsRes.data) {
+          setHighlights(highlightsRes.data);
+        }
+      } catch (err) {
+        console.error("Error loading book state:", err);
+      } finally {
+        setNumPages(pdf.numPages);
+        setLoadingState(false);
+      }
     }
-  }, [pdf, initialState]);
+    fetchState();
+  }, [book.id, user, pdf]);
 
-  const pagesArray = useMemo(() => {
-    return Array.from({ length: numPages }, (_, i) => i + 1);
-  }, [numPages]);
-
-  // Save state on change
+  // Save progress automatically (debounced)
   useEffect(() => {
-    const s = {
-      page: currentPage,
-      zoom: zoomLevel,
-      bookmarks: bookmarks
-    };
-    localStorage.setItem(storageKey, JSON.stringify(s));
-  }, [currentPage, zoomLevel, bookmarks, storageKey]);
+    if (loadingState || !user) return;
+    const saveTimer = setTimeout(async () => {
+      await supabase.from('user_progress').upsert({
+        user_id: user.id,
+        book_id: book.id,
+        current_page: currentPage,
+        zoom_level: renderZoom,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id, book_id' });
+    }, 1000);
 
-  // Keyboard navigation
+    return () => clearTimeout(saveTimer);
+  }, [currentPage, renderZoom, book.id, user, loadingState]);
+
+  const toggleBookmark = async () => {
+    if (!user) return;
+    const existing = bookmarks.find(b => b.page === currentPage);
+    
+    try {
+      if (existing) {
+        // Remove
+        setBookmarks(prev => prev.filter(b => b.page !== currentPage));
+        await supabase.from('bookmarks').delete().eq('id', existing.id);
+      } else {
+        // Add
+        const { data } = await supabase.from('bookmarks').insert({
+          user_id: user.id,
+          book_id: book.id,
+          page_number: currentPage
+        }).select().single();
+        
+        if (data) {
+          setBookmarks(prev => [...prev, { id: data.id, page: data.page_number }].sort((a,b) => a.page - b.page));
+        }
+      }
+    } catch (err) {
+      console.error("Error toggling bookmark:", err);
+    }
+  };
+
+  const removeBookmarkFromList = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setBookmarks(prev => prev.filter(b => b.id !== id));
+    try {
+      await supabase.from('bookmarks').delete().eq('id', id);
+    } catch (err) {
+      console.error("Error deleting bookmark:", err);
+    }
+  };
+
+  const jumpToPage = (pageIndex: number) => {
+    if (flipBookRef.current) {
+      flipBookRef.current.pageFlip().turnToPage(pageIndex);
+      setCurrentPage(pageIndex);
+    }
+    setShowBookmarksPanel(false);
+  };
+
+  const handleHighlight = async (pageNumber: number, rects: any[], text: string) => {
+    if (!user) return;
+    const tempHighlight = { id: Math.random().toString(), page_number: pageNumber, rects, text, color: 'rgba(255, 235, 59, 0.4)' };
+    setHighlights(prev => [...prev, tempHighlight]);
+
+    try {
+      const { data } = await supabase.from('highlights').insert({
+        user_id: user.id,
+        book_id: book.id,
+        page_number: pageNumber,
+        text,
+        rects,
+        color: 'rgba(255, 235, 59, 0.4)'
+      }).select().single();
+      
+      if (data) {
+        setHighlights(prev => prev.map(h => h.id === tempHighlight.id ? data : h));
+      }
+    } catch (err) {
+      console.error("Save highlight error:", err);
+    }
+  };
+
+  // Keyboard navigation & resize observer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') {
@@ -75,206 +158,320 @@ export function BookViewer({ pdf, file }: BookViewerProps) {
         flipBookRef.current?.pageFlip().flipPrev();
       }
     };
+
+    let resizeTimer: any;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (containerRef.current) {
+          setDimensions({
+            width: containerRef.current.clientWidth,
+            height: containerRef.current.clientHeight
+          });
+        }
+      }, 150);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleResize);
+    
+    handleResize(); 
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimer);
+    };
   }, []);
 
-  const handleZoomIn = () => setZoomLevel(z => Math.min(z + 0.25, 3));
-  const handleZoomOut = () => setZoomLevel(z => Math.max(z - 0.25, 0.5));
-  const handleResetZoom = () => setZoomLevel(1);
+  // Recalculate dimensions once the cloud sync finishes and the container natively mounts
+  useEffect(() => {
+    if (!loadingState && containerRef.current) {
+      setDimensions({
+        width: containerRef.current.clientWidth,
+        height: containerRef.current.clientHeight
+      });
+    }
+  }, [loadingState]);
 
-  const toggleBookmark = () => {
-    setBookmarks(prev => {
-      if (prev.includes(currentPage)) {
-        return prev.filter(p => p !== currentPage);
-      } else {
-        return [...prev, currentPage];
-      }
-    });
-  };
+  const isBookmarked = bookmarks.some(b => b.page === currentPage);
+  const handlePageChange = (e: any) => setCurrentPage(e.data);
 
-  const isBookmarked = bookmarks.includes(currentPage);
-  
-  const handlePageChange = (e: any) => {
-    setCurrentPage(e.data);
-  };
+  // Dynamic book sizes
+  const PAGE_ASPECT_RATIO = 0.707;
+  const isMobile = dimensions.width < 768;
+  const PADDING = isMobile ? 8 : 40; 
+  const availableWidth = Math.max(300, dimensions.width - PADDING * 2);
+  const availableHeight = Math.max(400, dimensions.height - PADDING * 2);
+
+  let pageWidth = availableWidth;
+  let pageHeight = availableHeight;
+
+  if (availableWidth / availableHeight < PAGE_ASPECT_RATIO) {
+    pageWidth = availableWidth;
+    pageHeight = availableWidth / PAGE_ASPECT_RATIO;
+  } else {
+    pageHeight = availableHeight;
+    pageWidth = availableHeight * PAGE_ASPECT_RATIO;
+  }
+
+  pageWidth = Math.max(200, pageWidth);
+  pageHeight = Math.max(200 / PAGE_ASPECT_RATIO, pageHeight);
+
+  // Colors
+  const headerBg = '#0B1121';
+  const mainBg = '#131B2F';
+  const controlColor = '#ffffff';
+
+  if (loadingState) {
+    return (
+      <div style={{ width: '10vw', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: headerBg, color: '#fff' }}>
+        <Loader2 className="animate-spin" size={32} color="#6366f1" />
+        <p style={{ marginTop: '1rem', color: 'rgba(255,255,255,0.6)' }}>Syncing cloud progress...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="glass-panel animate-fade-in" style={{ width: '100%', height: 'calc(100vh - 100px)', maxWidth: '1500px', display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)' }}>
-      <div className="book-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ margin: 0, fontFamily: 'Outfit', fontSize: isMobile ? '1.1rem' : '1.25rem', wordBreak: 'break-all', textAlign: 'left' }}>{file?.name || 'Document'}</h3>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'block', textAlign: 'left' }}>
-              Page {currentPage + 1} of {numPages}
-            </span>
-          </div>
-          
-          {isMobile && (
-            <button className="glass-pill flex-center" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} style={{ padding: '0.5rem', width: '40px', height: '40px' }} aria-label="Menu">
-              {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
-          )}
-        </div>
-        
-        {(!isMobile || isMobileMenuOpen) && (
-        <div className="flex-center toolbar-actions animate-fade-in" style={{ gap: '0.5rem', width: isMobile ? '100%' : 'auto', marginTop: isMobile ? '0.5rem' : 0 }}>
-          <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={() => flipBookRef.current?.pageFlip().flipPrev()} title="Previous Page (Left Arrow)">
-            <ChevronLeft size={22} />
-          </button>
-          <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={() => flipBookRef.current?.pageFlip().flipNext()} title="Next Page (Right Arrow)">
-            <ChevronRight size={22} />
-          </button>
-          
-          <div style={{ width: '1px', height: '24px', background: 'var(--glass-border)', margin: '0 0.5rem' }}></div>
-          
-          <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={handleZoomOut} title="Zoom Out">
-            <ZoomOut size={18} />
-          </button>
-          <button className="glass-pill flex-center" style={{ padding: '0.5rem', minWidth: '55px', fontSize: '0.8rem', fontWeight: 600 }} onClick={handleResetZoom} title="Reset Zoom">
-            {Math.round(zoomLevel * 100)}%
-          </button>
-          <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={handleZoomIn} title="Zoom In">
-            <ZoomIn size={18} />
-          </button>
-
-          <div style={{ width: '1px', height: '24px', background: 'var(--glass-border)', margin: '0 0.5rem' }}></div>
-
-          <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', color: isBookmarked ? 'var(--accent-color)' : 'inherit', background: isBookmarked ? 'rgba(99, 102, 241, 0.1)' : 'var(--glass-bg)', transition: 'all 0.2s' }} onClick={toggleBookmark} title={isBookmarked ? "Remove Bookmark" : "Add Bookmark"}>
-            {isBookmarked ? <BookmarkCheck size={18} /> : <BookmarkPlus size={18} />}
-          </button>
-
-          <div style={{ position: 'relative' }}>
-            <button className="glass-pill flex-center" style={{ padding: '0.5rem', width: '38px', height: '38px', transition: 'all 0.2s' }} onClick={() => setShowBookmarks(!showBookmarks)} title="Saved Bookmarks">
-              <List size={18} />
-            </button>
-            
-            {showBookmarks && (
-              <div className="glass-panel" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', padding: '1rem', minWidth: '180px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.5rem', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Saved Bookmarks</h4>
-                {bookmarks.length === 0 ? (
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>No bookmarks added yet.</p>
-                ) : (
-                  bookmarks.sort((a,b)=>a-b).map(b => (
-                    <div key={b} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <button style={{ flex: 1, padding: '0.6rem 1rem', textAlign: 'left', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--glass-border)', fontSize: '0.9rem', cursor: 'pointer', transition: 'background 0.2s' }} 
-                        onMouseOver={e => e.currentTarget.style.background = 'var(--selection-bg)'}
-                        onMouseOut={e => e.currentTarget.style.background = 'var(--bg-primary)'}
-                        onClick={() => { flipBookRef.current?.pageFlip().turnToPage(b); setShowBookmarks(false); }}>
-                        Jump to Page {b + 1}
-                      </button>
-                      <button 
-                        style={{ padding: '0.5rem', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-                        onMouseOut={e => e.currentTarget.style.color = 'var(--text-secondary)'}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBookmarks(prev => prev.filter(p => p !== b));
-                        }}
-                        title="Remove Bookmark"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-        )}
-      </div>
-      
-      <div style={{ flex: 1, position: 'relative', display: 'flex', overflow: 'auto', padding: isMobile ? '0.5rem' : '1rem', borderRadius: '12px' }}>
-        
-        {/* Left Flip Button (Floating on Mobile) */}
-        <button 
-           className="glass-pill flex-center hover-scale" 
-           style={isMobile ? {
-             width: '32px', height: '32px', zIndex: 100, opacity: 0.5,
-             background: 'var(--glass-bg)', border: 'none', boxShadow: 'none',
-             cursor: 'pointer', position: 'fixed', left: '0.5rem', top: '50%', transform: 'translateY(-50%)'
-           } : {
-             width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
-             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-             cursor: 'pointer', position: 'sticky', left: '0.5rem', top: 'calc(50% - 30px)' 
-           }}
-           onClick={() => flipBookRef.current?.pageFlip().flipPrev()} 
-           title="Previous Page"
+    <TransformWrapper
+      initialScale={renderZoom}
+      minScale={0.5}
+      maxScale={4}
+      centerOnInit={true}
+      wheel={{ step: 0.1 }}
+      panning={{ disabled: isHighlightMode }}
+      onZoomStop={(ref) => setRenderZoom(ref.state.scale)} 
+    >
+      {({ zoomIn, zoomOut }) => (
+        <div 
+          style={{ 
+            width: '100vw', 
+            height: '100vh', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            backgroundColor: headerBg,
+            color: controlColor,
+            fontFamily: 'Inter, sans-serif'
+          }}
         >
-           <ChevronLeft size={isMobile ? 24 : 32} />
-        </button>
+          {/* Top App Bar */}
+          <div 
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0 1rem', height: '64px', backgroundColor: headerBg, flexShrink: 0,
+              borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 10
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, overflow: 'hidden' }}>
+              <button 
+                onClick={onClose}
+                style={{ 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '40px', height: '40px', background: 'transparent', border: 'none', 
+                  color: controlColor, cursor: 'pointer', flexShrink: 0
+                }}
+              >
+                <ChevronLeft size={24} />
+              </button>
+              
+              <h2 style={{ 
+                margin: 0, fontSize: '1.1rem', fontWeight: 600, 
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                fontFamily: 'Outfit, sans-serif'
+              }} title={book.title}>
+                {book.title}
+              </h2>
+            </div>
 
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: 'min-content', minWidth: 'min-content', padding: isMobile ? '0.5rem 0 3rem 0' : '2rem 0' }}>
-          {/* Spacer Wrapper - forces scrollbars based on zoom level visually changing physical dimensions */}
-          <div style={{ width: `${baseWidth * finalScale}px`, height: `${600 * finalScale}px`, transition: 'width 0.3s, height 0.3s', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            
-            {/* The Transformer - applies GPU scale but its physical size remains exact for the book */}
-            <div style={{ width: `${baseWidth}px`, height: '600px', transform: `scale(${finalScale})`, transformOrigin: 'top center', transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-              {numPages > 0 ? (
-                // @ts-ignore
-                <HTMLFlipBook 
-                  width={400} 
-                  height={600} 
-                  size="fixed" 
-                  minWidth={400} 
-                  maxWidth={400} 
-                  minHeight={600} 
-                  maxHeight={600} 
-                  drawShadow={true} 
-                  showCover={true} 
-                  usePortrait={true} 
-                  startPage={initialState.page}
-                  autoSize={false} 
-                  maxShadowOpacity={0.5} 
-                  showPageCorners={true}
-                  mobileScrollSupport={true}
-                  useMouseEvents={zoomLevel <= 1}
-                  swipeDistance={isMobile ? 60 : 30}
-                  onFlip={handlePageChange}
-                  ref={flipBookRef}
-                  className="html-flip-book"
-                  style={{ margin: '0 auto', touchAction: zoomLevel <= 1 ? 'pan-y' : 'auto' }}
-                >
-                  {pagesArray.map((pageNum) => (
-                    <PDFPage 
-                      key={pageNum} 
-                      pdf={pdf} 
-                      pageNumber={pageNum} 
-                      width={400} 
-                      height={600} 
-                      zoom={zoomLevel}
-                    />
-                  ))}
-                </HTMLFlipBook>
-              ) : (
-                <div className="flex-center" style={{ flexDirection: 'column', gap: '1rem' }}>
-                  <p style={{ color: 'var(--text-secondary)' }}>Preparing book mechanics...</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, position: 'relative' }}>
+              <button style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: controlColor, cursor: 'pointer' }}>
+                <Search size={20} />
+              </button>
+              
+              <span style={{ fontSize: '0.9rem', fontWeight: 500, margin: '0 0.5rem', userSelect: 'none' }}>
+                {Math.round(renderZoom * 100)}%
+              </span>
+              
+              <button onClick={() => zoomOut()} style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: controlColor, cursor: 'pointer' }}>
+                <ZoomOut size={20} />
+              </button>
+              
+              <button onClick={() => zoomIn()} style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: controlColor, cursor: 'pointer' }}>
+                <ZoomIn size={20} />
+              </button>
+
+              <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 0.25rem' }} />
+
+              <button 
+                onClick={() => setIsHighlightMode(!isHighlightMode)} 
+                style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isHighlightMode ? 'rgba(99, 102, 241, 0.15)' : 'transparent', border: 'none', color: isHighlightMode ? '#6366f1' : controlColor, cursor: 'pointer', borderRadius: '8px' }}
+                title="Toggle Text Highlight Mode"
+              >
+                <Highlighter size={20} />
+              </button>
+
+              <button onClick={toggleBookmark} style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: isBookmarked ? '#6366f1' : controlColor, cursor: 'pointer' }} title="Bookmark Current Page">
+                {isBookmarked ? <BookmarkCheck size={20} /> : <BookmarkPlus size={20} />}
+              </button>
+
+              <button 
+                onClick={() => setShowBookmarksPanel(!showBookmarksPanel)}
+                style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: showBookmarksPanel ? 'rgba(255,255,255,0.1)' : 'transparent', borderRadius: '8px', border: 'none', color: controlColor, cursor: 'pointer' }}
+              >
+                <List size={20} />
+              </button>
+
+              {/* Bookmarks Dropdown */}
+              {showBookmarksPanel && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: '0', marginTop: '0.5rem',
+                  backgroundColor: '#131b2f', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)',
+                  width: '240px', maxHeight: '300px', overflowY: 'auto', zIndex: 100
+                }}>
+                  <div style={{ padding: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.9rem', fontWeight: 600 }}>
+                    Saved Bookmarks
+                  </div>
+                  {bookmarks.length === 0 ? (
+                    <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
+                      No bookmarks saved yet.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {bookmarks.map(b => (
+                        <div key={b.id} style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                          <button 
+                            onClick={() => jumpToPage(b.page)}
+                            style={{
+                              flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem',
+                              padding: '0.75rem 1rem', background: 'transparent', border: 'none',
+                              color: b.page === currentPage ? '#6366f1' : '#fff', cursor: 'pointer',
+                              textAlign: 'left'
+                            }}
+                          >
+                            <BookmarkCheck size={16} />
+                            <span>Page {b.page + 1}</span>
+                          </button>
+                          <button 
+                            onClick={(e) => removeBookmarkFromList(e, b.id)}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              padding: '0 1rem', background: 'transparent', border: 'none',
+                              color: 'rgba(239, 68, 68, 0.7)', cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
+          
+          <div 
+            ref={containerRef}
+            style={{ 
+              flex: 1, backgroundColor: mainBg, position: 'relative', overflow: 'hidden' 
+            }}
+          >
+            <TransformComponent 
+              wrapperStyle={{ width: '100%', height: '100%' }} 
+              contentStyle={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            >
+              {dimensions.width > 0 && numPages > 0 ? (
+                <div style={{ 
+                  width: `${pageWidth}px`, height: `${pageHeight}px`,
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', backgroundColor: '#fff' 
+                }}>
+                  {/* @ts-ignore */}
+                  <HTMLFlipBook 
+                    width={pageWidth} 
+                    height={pageHeight}
+                    size="fixed"
+                    minWidth={300}
+                    maxWidth={pageWidth}
+                    minHeight={400}
+                    maxHeight={pageHeight}
+                    showCover={true}
+                    usePortrait={true}
+                    drawShadow={true}
+                    useMouseEvents={false}
+                    startPage={initialPage}
+                    onFlip={handlePageChange}
+                    ref={flipBookRef}
+                    className="book-container shadow-2xl"
+                  >
+                    {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => {
+                      const isPageVisible = Math.abs(pageNum - 1 - currentPage) <= 2;
+                      return (
+                        <PDFPage 
+                          key={pageNum} 
+                          pdf={pdf} 
+                          pageNumber={pageNum} 
+                          width={pageWidth} 
+                          height={pageHeight} 
+                          zoom={renderZoom} 
+                          shouldRender={isPageVisible}
+                          isHighlightMode={isHighlightMode}
+                          highlights={highlights.filter(h => h.page_number === pageNum)}
+                          onHighlight={(rects, text) => handleHighlight(pageNum, rects, text)}
+                        />
+                      );
+                    })}
+                  </HTMLFlipBook>
+                </div>
+              ) : (
+                <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'rgba(255,255,255,0.5)' }}>
+                  Loading reader layout...
+                </div>
+              )}
+            </TransformComponent>
+          </div>
+          
+          {/* Bottom Navigation */}
+          <div 
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: '64px', backgroundColor: headerBg, flexShrink: 0,
+              borderTop: '1px solid rgba(255,255,255,0.05)', gap: '2rem', zIndex: 10
+            }}
+          >
+            <button 
+              onClick={() => flipBookRef.current?.pageFlip().flipPrev()} 
+              disabled={currentPage === 0}
+              style={{ 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '40px', height: '40px', background: 'transparent', border: 'none', 
+                color: currentPage === 0 ? 'rgba(255,255,255,0.2)' : controlColor, 
+                cursor: currentPage === 0 ? 'default' : 'pointer'
+              }}
+              title="Previous Page"
+            >
+              <ChevronLeft size={24} />
+            </button>
+
+            <span style={{ fontSize: '1rem', fontWeight: 600, fontFamily: 'Inter, sans-serif', width: '80px', textAlign: 'center', letterSpacing: '0.05em' }}>
+              {currentPage + 1} / {numPages}
+            </span>
+
+            <button 
+              onClick={() => flipBookRef.current?.pageFlip().flipNext()} 
+              disabled={currentPage === numPages - 1}
+              style={{ 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '40px', height: '40px', background: 'transparent', border: 'none', 
+                color: currentPage === numPages - 1 ? 'rgba(255,255,255,0.2)' : controlColor, 
+                cursor: currentPage === numPages - 1 ? 'default' : 'pointer'
+              }}
+              title="Next Page"
+            >
+              <ChevronRight size={24} />
+            </button>
+          </div>
         </div>
-
-        {/* Right Flip Button (Floating on Mobile) */}
-        <button 
-           className="glass-pill flex-center hover-scale" 
-           style={isMobile ? {
-             width: '32px', height: '32px', zIndex: 100, opacity: 0.5,
-             background: 'var(--glass-bg)', border: 'none', boxShadow: 'none',
-             cursor: 'pointer', position: 'fixed', right: '0.5rem', top: '50%', transform: 'translateY(-50%)'
-           } : {
-             width: '60px', height: '60px', zIndex: 10, flexShrink: 0, 
-             background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', boxShadow: '0 4px 12px var(--book-shadow)',
-             cursor: 'pointer', position: 'sticky', right: '0.5rem', top: 'calc(50% - 30px)' 
-           }}
-           onClick={() => flipBookRef.current?.pageFlip().flipNext()} 
-           title="Next Page"
-        >
-           <ChevronRight size={isMobile ? 24 : 32} />
-        </button>
-
-      </div>
-    </div>
+      )}
+    </TransformWrapper>
   );
 }
