@@ -141,3 +141,29 @@ button {
   color: inherit;
   outline: none;
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .book-toolbar {
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center !important;
+    flex-direction: column;
+  }
+  .book-toolbar > div {
+    text-align: center;
+  }
+  .uploader-container {
+    padding: 1.5rem 1rem !important;
+  }
+  .hide-on-mobile {
+    display: none !important;
+  }
+  .glass-pill {
+    padding: 0.4rem 0.6rem !important;
+  }
+  .toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
